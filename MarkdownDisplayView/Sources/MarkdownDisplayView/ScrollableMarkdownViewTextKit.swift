@@ -144,6 +144,22 @@ extension ScrollableMarkdownViewTextKit {
         markdownView.endRealStreaming(completion: completion)
     }
 
+    /// 启用动态打字机速度
+    /// - Parameter targetDuration: 目标剩余显示时间（秒），默认1.0
+    public func enableDynamicTypewriterSpeed(targetDuration: TimeInterval = 1.0) {
+        markdownView.enableDynamicTypewriterSpeed(targetDuration: targetDuration)
+    }
+
+    /// 禁用动态打字机速度
+    public func disableDynamicTypewriterSpeed() {
+        markdownView.disableDynamicTypewriterSpeed()
+    }
+
+    /// 追加流式数据（智能缓存模式）
+    public func appendStreamData(_ data: String) {
+        markdownView.appendStreamData(data)
+    }
+
     // 返回目录按钮点击
     @objc func backToTOCTapped() {
         if markdownView.hasTableOfContentsSection {

@@ -53,6 +53,25 @@ public final class MarkdownViewTextKit: UIView {
             elementGapDuration: elementGapDuration
         )
     }
+
+    /// 启用动态打字机速度，使队列中剩余内容在指定时间内完成显示。
+    /// 适用于真流式场景：后台快速输出时打字机自动加速，慢速时恢复正常节奏。
+    /// - Parameter targetDuration: 目标剩余显示时间（秒），默认1.0
+    public func enableDynamicTypewriterSpeed(targetDuration: TimeInterval = 1.0) {
+        typewriterEngine.dynamicSpeedEnabled = true
+        typewriterEngine.targetRemainingDuration = targetDuration
+    }
+
+    /// 禁用动态打字机速度，恢复固定速度
+    public func disableDynamicTypewriterSpeed() {
+        typewriterEngine.dynamicSpeedEnabled = false
+        // 恢复默认速度
+        typewriterEngine.updateSpeed(
+            charsPerStep: 6,
+            baseDuration: 0.012,
+            elementGapDuration: 0.04
+        )
+    }
     
     public var configuration: MarkdownConfiguration = .default {
         didSet {
@@ -5324,6 +5343,12 @@ public final class MarkdownViewTextKit: UIView {
 
         print("🎉 [RealStream] Ending real streaming mode")
 
+        // ⭐️ 动态调速兜底：流结束时确保剩余内容快速显示完毕
+        if !typewriterEngine.dynamicSpeedEnabled {
+            typewriterEngine.dynamicSpeedEnabled = true
+            typewriterEngine.targetRemainingDuration = 1.0
+        }
+
         // ⭐️ 停止等待检测定时器
         stopWaitingDetection()
 
@@ -5392,6 +5417,9 @@ public final class MarkdownViewTextKit: UIView {
             self.isRealStreamingMode = false
             self.isStreaming = false
             self.useSmartBufferMode = false
+            // 关闭动态调速并恢复默认速度
+            self.typewriterEngine.dynamicSpeedEnabled = false
+            self.typewriterEngine.updateSpeed(charsPerStep: 6, baseDuration: 0.012, elementGapDuration: 0.04)
             print("[FOOTNOTE_DEBUG] 🔴 isRealStreamingMode set to FALSE")
 
             // 3. 通知最终高度

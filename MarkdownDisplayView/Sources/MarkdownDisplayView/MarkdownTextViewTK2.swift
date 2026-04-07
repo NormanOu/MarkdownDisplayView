@@ -361,6 +361,11 @@ extension MarkdownTextViewTK2 {
         }
     }
 
+    /// 已揭示的字符数（供 TypewriterEngine 动态调速使用）
+    var revealedLength: Int {
+        return lastRevealedIndex
+    }
+
     /// 准备打字机效果：将所有文字设为透明，但保留布局占位
     func prepareForTypewriter() {
         guard let attr = textContentStorage.attributedString else {

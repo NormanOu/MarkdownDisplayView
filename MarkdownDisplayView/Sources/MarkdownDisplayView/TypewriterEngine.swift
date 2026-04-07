@@ -43,6 +43,16 @@ class TypewriterEngine {
     // ⭐️ 新增：标记上一个任务是否是块级任务（用于判断是否需要添加间隔）
     private var lastTaskWasBlock: Bool = false
 
+    /// 是否启用动态速度调节
+    var dynamicSpeedEnabled: Bool = false
+
+    /// 目标剩余显示时间（秒），默认1.0
+    var targetRemainingDuration: TimeInterval = 1.0
+
+    /// 动态速度恢复时的默认值
+    private let defaultBaseDuration: TimeInterval = 0.012
+    private let defaultCharsPerStep: Int = 6
+
     var onComplete: (() -> Void)?
     var onLayoutChange: (() -> Void)?
     /// 每次输出内容时的回调（用于震动反馈等）
@@ -59,6 +69,70 @@ class TypewriterEngine {
         }
         if let elementGapDuration {
             self.elementGapDuration = max(0, elementGapDuration)
+        }
+    }
+
+    // MARK: - Dynamic Speed Adjustment
+
+    /// 估算队列中剩余的字符数（包括当前正在处理的文本任务）
+    private func estimateRemainingCharacters() -> Int {
+        var remaining = 0
+
+        // 1. 当前正在执行的 .text 任务
+        if let task = currentTask {
+            switch task {
+            case .text(let textView):
+                if let attrLen = textView.attributedText?.length {
+                    // 减去已揭示的字符数
+                    let revealed = textView.revealedLength
+                    remaining += max(0, attrLen - revealed)
+                }
+            default:
+                break
+            }
+        }
+
+        // 2. 队列中待处理的 .text 任务
+        for task in taskQueue {
+            switch task {
+            case .text(let textView):
+                remaining += textView.attributedText?.length ?? 0
+            default:
+                break
+            }
+        }
+
+        return remaining
+    }
+
+    /// 根据剩余字符数动态调整速度
+    private func adjustDynamicSpeed() {
+        let remainingChars = estimateRemainingCharacters()
+
+        guard remainingChars > 0 else {
+            // 队列几乎为空，恢复默认速度
+            baseDuration = defaultBaseDuration
+            charsPerStep = defaultCharsPerStep
+            return
+        }
+
+        let remainingSteps = max(1, (remainingChars + charsPerStep - 1) / charsPerStep)
+
+        // 计算目标延迟
+        let targetDelay = targetRemainingDuration / Double(remainingSteps)
+
+        // 限制范围保证可读性
+        baseDuration = min(max(targetDelay, 0.001), defaultBaseDuration)
+
+        // 剩余字符很多时，同时增大 charsPerStep
+        if remainingChars > 200 {
+            let targetSteps = Int(targetRemainingDuration / 0.005)
+            charsPerStep = min(max(remainingChars / max(1, targetSteps), defaultCharsPerStep), 100)
+        } else {
+            // 剩余较少时恢复默认
+            if charsPerStep > defaultCharsPerStep {
+                charsPerStep = defaultCharsPerStep
+            }
         }
     }
 
@@ -398,7 +472,13 @@ class TypewriterEngine {
             onTypewriterStep?()
         }
 
-        let delay = calculateDelay(at: currentIndex, text: textView.attributedText?.string ?? "")
+        // ⭐️ 动态速度调节：根据队列剩余量自动调整打字速度
+        if dynamicSpeedEnabled {
+            adjustDynamicSpeed()
+        }
+
+        // 动态调速时使用精确计算的 baseDuration，跳过标点额外延迟
+        let delay: TimeInterval = dynamicSpeedEnabled ? baseDuration : calculateDelay(at: currentIndex, text: textView.attributedText?.string ?? "")
 
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             self?.typeNextCharacter(textView, currentIndex: nextIndex, token: token)
